@@ -1,0 +1,9 @@
+# START YOAST BLOCK
+# ---------------------------
+User-agent: *
+Disallow:
+
+# ---------------------------
+# END YOAST BLOCK
+Sitemap: https://vitahost.es/sitemap.xml
+Sitemap: https://vitahost.es/sitemap.html

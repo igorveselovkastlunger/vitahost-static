@@ -1,0 +1,10 @@
+.DS_Store
+*.log
+.env
+.env.local
+node_modules/
+.vercel/
+
+# Don't commit the live mirror log
+/tmp/
+mirror.log
