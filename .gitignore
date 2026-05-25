@@ -8,3 +8,4 @@ node_modules/
 # Don't commit the live mirror log
 /tmp/
 mirror.log
+.vercel

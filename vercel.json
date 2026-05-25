@@ -7,7 +7,40 @@
     { "source": "/index.html", "destination": "/", "permanent": true },
     { "source": "/wp-admin/(.*)", "destination": "/", "permanent": false },
     { "source": "/wp-login.php", "destination": "/", "permanent": false },
-    { "source": "/xmlrpc.php", "destination": "/", "permanent": false }
+    { "source": "/xmlrpc.php", "destination": "/", "permanent": false },
+
+    { "source": "/blog-airbnb-property-management/page/(.*)",
+      "destination": "/blog-airbnb-property-management/",
+      "permanent": false },
+
+    { "source": "/category/(.*)",
+      "destination": "/blog-airbnb-property-management/",
+      "permanent": false },
+
+    { "source": "/tag/(.*)",
+      "destination": "/blog-airbnb-property-management/",
+      "permanent": false },
+
+    { "source": "/author/(.*)",
+      "destination": "/",
+      "permanent": false },
+
+    { "source": "/contact/",
+      "destination": "/contact-airbnb-property-management-torrevieja/",
+      "permanent": true },
+    { "source": "/contact-us/",
+      "destination": "/contact-airbnb-property-management-torrevieja/",
+      "permanent": true },
+
+    { "source": "/feed/",
+      "destination": "/blog-airbnb-property-management/",
+      "permanent": false },
+    { "source": "/comments/feed/",
+      "destination": "/blog-airbnb-property-management/",
+      "permanent": false },
+    { "source": "/:slug/feed/",
+      "destination": "/:slug/",
+      "permanent": false }
   ],
   "headers": [
     {

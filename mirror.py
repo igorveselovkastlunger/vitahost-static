@@ -15,6 +15,8 @@ from __future__ import annotations
 import gzip
 import os
 import re
+import socket
+import ssl
 import sys
 import time
 from html import unescape
@@ -26,7 +28,24 @@ from xml.etree import ElementTree as ET
 
 BASE_URL = "https://vitahost.es"
 BASE_HOST = "vitahost.es"
+# Hit the origin WordPress directly — DNS for vitahost.es is now pointed at
+# Vercel (this very mirror), so the canonical resolver would loop us back to
+# our own snapshot. Override at the socket layer.
+ORIGIN_IP = "217.160.0.225"
 OUT_DIR = Path(__file__).parent / "public"
+
+_real_getaddrinfo = socket.getaddrinfo
+def _patched_getaddrinfo(host, *args, **kwargs):
+    if host in (BASE_HOST, f"www.{BASE_HOST}"):
+        return _real_getaddrinfo(ORIGIN_IP, *args, **kwargs)
+    return _real_getaddrinfo(host, *args, **kwargs)
+socket.getaddrinfo = _patched_getaddrinfo
+
+# Some shared SSL hosting setups don't have a matching cert for the bare IP —
+# skip cert hostname checking; we already trust the IP source.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "vitahost-static-mirror"
@@ -51,8 +70,15 @@ CSS_URL_RE = re.compile(r'url\(\s*(["\']?)([^)"\']+)\1\s*\)')
 CSS_IMPORT_RE = re.compile(r'@import\s+(?:url\()?["\']([^"\')]+)["\']?\)?', re.IGNORECASE)
 
 SKIP_PATH_RE = re.compile(
-    r'(/wp-admin|/wp-login\.php|/xmlrpc\.php|/wp-json|/feed/?$|'
+    r'(/wp-admin|/wp-login\.php|/xmlrpc\.php|/wp-json|'
     r'/comments/feed|/comment-page-)',
+    re.IGNORECASE,
+)
+# HTML pages we'll follow even though they aren't in the sitemap:
+# blog/category pagination, taxonomy archives, classic contact aliases.
+ALLOW_DISCOVERY_RE = re.compile(
+    r'(/page/\d+/?$|/category/[^/]+/?$|/tag/[^/]+/?$|'
+    r'/author/[^/]+/?$|^/contact/?$|^/contact-us/?$)',
     re.IGNORECASE,
 )
 SKIP_QUERY_RE = re.compile(
@@ -118,7 +144,7 @@ def fetch(url: str) -> tuple[bytes, str]:
         "Accept": "*/*",
         "Accept-Encoding": "gzip, deflate",
     })
-    with urlopen(req, timeout=30) as r:
+    with urlopen(req, timeout=30, context=_SSL_CTX) as r:
         data = r.read()
         if r.headers.get("Content-Encoding") == "gzip":
             data = gzip.decompress(data)
@@ -263,9 +289,12 @@ def main() -> None:
             for a in assets:
                 if a in processed:
                     continue
-                # Only follow brand-new HTML pages if they're already in the seed.
+                # Follow brand-new HTML pages only if (a) they're in the seed,
+                # or (b) their path matches a discovery pattern we trust
+                # (pagination, category, tag archives, contact aliases).
                 if not looks_like_asset(a) and a not in seed_set:
-                    continue
+                    if not ALLOW_DISCOVERY_RE.search(urlparse(a).path):
+                        continue
                 queue.append(a)
                 new_assets += 1
             stats["html"] += 1
