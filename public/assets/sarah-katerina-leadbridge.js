@@ -20,6 +20,87 @@
 (function () {
   var SK_ENDPOINT = "https://www.sarahkaterina.com/api/lead-notify";
 
+  /* ----------------------------------------------------------------
+   * Google Ads conversion tracking.
+   *
+   * The "VITA - Lead Form Submit" conversion action lives in the
+   * Sarah Katerina Google Ads account (AW-18128432743), label
+   * hAUDCOODzrUcEOfcp8RD. This static site only had the unrelated tag
+   * AW-17471438459 loaded, so the conversion never fired. We
+   * additionally configure AW-18128432743 here (gtag.js is already
+   * loaded site-wide via GT-PBGB378) and fire the event snippet on the
+   * /thank-you/ page that users reach after the Web3Forms contact-form
+   * submit.
+   *
+   * Enhanced conversions: the contact form email is stashed in
+   * sessionStorage on submit. The Web3Forms round-trip returns to
+   * vitahost.es/thank-you/ — same origin — so the value survives, and
+   * we hand it to gtag('set','user_data',…) before the conversion so
+   * Google can match it (hashing happens client-side in gtag).
+   * ---------------------------------------------------------------- */
+  var GADS_ACCOUNT = "AW-18128432743";
+  var GADS_LEAD_LABEL = "AW-18128432743/hAUDCOODzrUcEOfcp8RD";
+  var EMAIL_KEY = "vh_lead_email";
+  var FIRED_KEY = "vh_lead_conv_fired";
+
+  function gtagSafe() {
+    return typeof window.gtag === "function" ? window.gtag : null;
+  }
+
+  function isThankYou() {
+    return /\/thank-you\/?$/.test(location.pathname);
+  }
+
+  function captureLeadEmail(form) {
+    try {
+      var el = form.querySelector(
+        'input[type="email"], [name="Email"], [name="E-mail"], [name="email"]'
+      );
+      var v = el && el.value ? String(el.value).trim().toLowerCase() : "";
+      if (v) {
+        sessionStorage.setItem(EMAIL_KEY, v);
+        sessionStorage.removeItem(FIRED_KEY);
+      }
+    } catch (e) {
+      /* sessionStorage may be unavailable — conversion still fires sans EC */
+    }
+  }
+
+  function initGoogleAds() {
+    var gtag = gtagSafe();
+    if (!gtag) return;
+    try {
+      // Report this site to the correct Google Ads account too.
+      gtag("config", GADS_ACCOUNT);
+
+      if (!isThankYou()) return;
+
+      // Guard against double-firing on a thank-you refresh.
+      var alreadyFired = false;
+      try {
+        alreadyFired = sessionStorage.getItem(FIRED_KEY) === "1";
+      } catch (e) {}
+      if (alreadyFired) return;
+
+      // Enhanced conversions: pass the lead email if we stashed one.
+      try {
+        var email = sessionStorage.getItem(EMAIL_KEY);
+        if (email) {
+          gtag("set", "user_data", { email: email });
+        }
+      } catch (e) {}
+
+      gtag("event", "conversion", { send_to: GADS_LEAD_LABEL });
+
+      try {
+        sessionStorage.setItem(FIRED_KEY, "1");
+        sessionStorage.removeItem(EMAIL_KEY);
+      } catch (e) {}
+    } catch (e) {
+      /* never break the page over analytics */
+    }
+  }
+
   function ping(form, sourceLabel) {
     try {
       if (form.querySelector('[name="botcheck"]')?.checked) return;
@@ -75,6 +156,7 @@
     // Primary contact form — Web3Forms path.
     if (action.indexOf("web3forms") !== -1) {
       form.addEventListener("submit", function () {
+        captureLeadEmail(form);
         ping(form, "VITA Host — Contact form");
       });
       return;
@@ -129,9 +211,14 @@
     document.querySelectorAll("form").forEach(attach);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", attachAll);
-  } else {
+  function init() {
     attachAll();
+    initGoogleAds();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
   }
 })();
